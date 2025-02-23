@@ -13,8 +13,10 @@ type Task struct {
 	ID          int
 	Title       string
 	Description string
-	StartTime   time.Time
-	EndTime     time.Time
+	StartTime   *time.Time
+	EndTime     *time.Time
+	StartDate   *time.Time
+	EndDate     *time.Time
 	RepeatDays  string
 	Cancel      bool
 }
@@ -94,8 +96,10 @@ func createTables(db *sql.DB) error {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		title TEXT NOT NULL,
 		description TEXT,
-		start_time DATETIME ,
-		end_time DATETIME ,
+		start_time TIME ,
+		end_time TIME ,
+		start_date DATE,
+		end_date DATE,
 		repeat_days TEXT,
 		cancel BOOLEAN DEFAULT FALSE
 	);`
@@ -108,25 +112,37 @@ func (g *Goboard) Close() error {
 	return g.DB.Close()
 }
 
-func (g *Goboard) InsertTask(buffer []string) {
+func (g *Goboard) InsertTask(task Task) error {
 	query := `
-	INSERT INTO tasks (title, description)
-	VALUES (?, ?);`
+	INSERT INTO tasks (title, description, start_date, end_date, start_time, end_time, repeat_days, cancel)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?);`
 
-	_, err := g.DB.Exec(query, buffer[0], buffer[1])
+	_, err := g.DB.Exec(
+		query,
+		task.Title,
+		task.Description,
+		task.StartDate,
+		task.EndDate,
+		task.StartTime,
+		task.EndTime,
+		task.RepeatDays,
+		task.Cancel,
+	)
 	if err != nil {
-		log.Fatal("couldn't insert new task")
+		return fmt.Errorf("failed to insert task: %w", err)
 	}
+
+	return nil
 }
-func (g *Goboard) ReadTasks() {
+func (g *Goboard) ReadTasks() []Task {
 	query := `
-	SELECT id, title, description, start_time, end_time, repeat_days, cancel
+	SELECT id, title, description, start_date, end_date, start_time, end_time, repeat_days, cancel
 	FROM tasks
-	ORDER BY start_time;`
+	ORDER BY start_date;`
 
 	rows, err := g.DB.Query(query)
 	if err != nil {
-		fmt.Errorf("failed to query tasks: %w", err)
+		fmt.Println("failed to query tasks: %w", err)
 	}
 	defer rows.Close()
 
@@ -134,28 +150,42 @@ func (g *Goboard) ReadTasks() {
 
 	for rows.Next() {
 		var task Task
+		var startDate, endDate, startTime, endTime *string
 		err := rows.Scan(
 			&task.ID,
 			&task.Title,
 			&task.Description,
-			&task.StartTime,
-			&task.EndTime,
+			&startDate,
+			&endDate,
+			&startTime,
+			&endTime,
 			&task.RepeatDays,
 			&task.Cancel,
 		)
+
 		if err != nil {
-			fmt.Errorf("failed to scan task: %w", err)
+			fmt.Println("failed to scan task: %w", err)
 		}
+		dateLayout := "03-03-2006"
+		timeLayout := "15:04"
+		parsedata, err := time.Parse(dateLayout, (*startDate)[:11])
+		task.StartDate = &parsedata
+		parsedata, err = time.Parse(dateLayout, (*endDate)[:11])
+		task.EndDate = &parsedata
+		parsedata, err = time.Parse(timeLayout, (*startTime)[11:16])
+		task.StartTime = &parsedata
+		parsedata, err = time.Parse(timeLayout, (*endTime)[11:16])
+		task.EndTime = &parsedata
+		if err != nil {
+			fmt.Println("error", err)
+		}
+		task.EndDate = &parsedata
 		tasks = append(tasks, task)
 	}
 
 	// Check for errors after iteration
 	if err := rows.Err(); err != nil {
-		fmt.Errorf("error after iterating rows: %w", err)
+		fmt.Println("error after iterating rows: %w", err)
 	}
-
-	for _, t := range tasks {
-		fmt.Println(t.Title)
-		fmt.Println(t.Description)
-	}
+	return tasks
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -18,6 +20,7 @@ type TextInputPanel struct {
 	cursorX        int
 	cursorY        int
 	cursorBlink    float32
+	initFlag       bool
 }
 
 func NewInputTextPanel(pw, ph, ibw, ibh, x, y int) TextInputPanel {
@@ -33,7 +36,26 @@ func NewInputTextPanel(pw, ph, ibw, ibh, x, y int) TextInputPanel {
 		cursorY:        0,
 		cursorBlink:    0,
 		buffer:         []string{},
+		initFlag:       false,
 	}
+}
+
+func (p *TextInputPanel) Animate() {
+	if !p.initFlag {
+		p.initFlag = true
+		for i := 100; i > 0; i = i - 1 {
+			rl.BeginDrawing()
+			rl.DrawRectangle(int32(p.posX/i), int32(p.posY/i), int32(p.panelWidth/i), int32(p.panelHeight/i), goboard.Overlay)
+			rl.DrawRectangleLines(int32(p.posX/i), int32(p.posY/i), int32(p.panelWidth/i), int32(p.panelHeight/i), goboard.Muted)
+
+			rl.DrawRectangle(int32(p.posX/i), int32(p.inputBoxY/i), int32(p.inputBoxWidth/i), int32(p.inputBoxHeight/i), goboard.Surface)
+			rl.DrawRectangleLines(int32(p.posX/i), int32(p.inputBoxY/i), int32(p.inputBoxWidth/i), int32(p.inputBoxHeight/i), rl.White)
+			time.Sleep(10 * time.Millisecond)
+			rl.EndDrawing()
+		}
+	}
+	rl.BeginDrawing()
+	p.DrawTextInputPanel()
 }
 
 func (p *TextInputPanel) DrawTextInputPanel() {
@@ -114,8 +136,73 @@ func (p *TextInputPanel) Write() {
 }
 
 func (p *TextInputPanel) Reset() {
-	goboard.InsertTask(p.buffer)
+	if len(p.buffer) > 2 {
+		if t, err := p.ParseInput(); err != nil {
+			fmt.Println(err)
+		} else {
+			goboard.InsertTask(t)
+		}
+
+	}
 	p.cursorX = 0
 	p.cursorY = 0
 	p.buffer = []string{}
+	p.initFlag = false
+}
+
+func (p *TextInputPanel) ParseInput() (Task, error) {
+
+	if len(p.buffer) < 2 {
+		return Task{}, fmt.Errorf("invalid task format: must atleast have a name and a description for the task")
+	}
+
+	// Parse start date & end date ie line 3
+	var startDate *time.Time
+	var endDate *time.Time
+	dates := strings.Split(p.buffer[2], " ")
+	if strings.TrimSpace(p.buffer[2]) != "" {
+		parsedStartDate, err := time.Parse("02-01-2006", strings.TrimSpace(dates[0]))
+		if err != nil {
+			return Task{}, fmt.Errorf("invalid start date format: %w", err)
+		}
+		startDate = &parsedStartDate
+
+		parsedEndDate, err := time.Parse("02-01-2006", strings.TrimSpace(dates[1]))
+		if err != nil {
+			return Task{}, fmt.Errorf("invalid end date format: %w", err)
+		}
+		endDate = &parsedEndDate
+	}
+
+	timings := strings.Split(p.buffer[3], " ")
+	// Parse start time and end time
+	var startTime *time.Time
+	var endTime *time.Time
+	if strings.TrimSpace(p.buffer[3]) != "" {
+		parsedStartTime, err := time.Parse("15:04", strings.TrimSpace(timings[0]))
+		if err != nil {
+			return Task{}, fmt.Errorf("invalid start time format: %w", err)
+		}
+		startTime = &parsedStartTime
+
+		parsedEndTime, err := time.Parse("15:04", strings.TrimSpace(timings[1]))
+		if err != nil {
+			return Task{}, fmt.Errorf("invalid end time format: %w", err)
+		}
+		endTime = &parsedEndTime
+	}
+
+	fmt.Println(timings[1], timings[2])
+	rpeatDays := timings[2]
+
+	return Task{
+		Title:       strings.TrimSpace(p.buffer[0]),
+		Description: strings.TrimSpace(p.buffer[1]),
+		StartDate:   startDate,
+		EndDate:     endDate,
+		StartTime:   startTime,
+		EndTime:     endTime,
+		RepeatDays:  rpeatDays,
+		Cancel:      false,
+	}, nil
 }
