@@ -1,10 +1,10 @@
 package main
 
 import (
-	"log"
-
+	"fmt"
 	rl "github.com/gen2brain/raylib-go/raylib"
 	_ "github.com/mattn/go-sqlite3"
+	"log"
 )
 
 var (
@@ -17,7 +17,7 @@ var (
 	insertFlag     bool = false
 	tasksPanels    []TaskPanel
 	fullscreenFlag bool = false
-	move           bool = false
+	panelToMove         = -1
 )
 
 func update() {}
@@ -37,28 +37,38 @@ func input() {
 		rl.ToggleBorderlessWindowed()
 		fullscreenFlag = !fullscreenFlag
 	}
-	if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
+	if rl.IsMouseButtonDown(rl.MouseButtonLeft) {
 		mouseP := rl.GetMousePosition()
-		if mouseP.X > 4 && mouseP.X < 355 {
-			if int(mouseP.Y)%200 >= 0 && int(mouseP.Y)%200 <= 20 {
-				move = true
+		if panelToMove == -1 {
+			for i, panel := range tasksPanels {
+				if panel.PosX <= int(mouseP.X) && (panel.PosX+panel.PanelWidth) >= int(mouseP.X) {
+					if panel.PosY <= int(mouseP.Y) && panel.TaskBoxY >= int(mouseP.Y) {
+						panelToMove = i
+					}
+				}
 			}
+		} else {
+			tasksPanels[panelToMove].PosX = int(mouseP.X)
+			tasksPanels[panelToMove].PosY = int(mouseP.Y)
+			tasksPanels[panelToMove].TaskBoxY = int(mouseP.Y) + 30
 		}
 	}
 
-	if rl.IsMouseButtonDown(rl.MouseButtonLeft) && move {
-		mouseP := rl.GetMousePosition()
-		if len(tasksPanels) > 0 {
-			tasksPanels[0].posX = int(mouseP.X)
-			tasksPanels[0].posY = int(mouseP.Y)
-			tasksPanels[0].taskBoxY = int(mouseP.Y) + 30
-		}
-	}
 	if rl.IsMouseButtonReleased(rl.MouseButtonLeft) {
-		move = false
+		panelToMove = -1
 	}
 }
 func render() {
+	screenWidth := int32(rl.GetScreenWidth())
+	screenHeight := int32(rl.GetScreenHeight())
+
+	// Define the starting x position
+	startX := int32(500)
+
+	// Calculate cell width and height based on screen size
+	cellWidth := (screenWidth - startX) / 7
+	cellHeight := screenHeight / 24
+
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.NewColor(25, 23, 36, 255))
 	for _, t := range tasksPanels {
@@ -72,7 +82,29 @@ func render() {
 
 	}
 	if fullscreenFlag {
-		//rl.DrawLine(int32(goboard.WindowWidth+40), 0, int32(goboard.WindowHeight), int32(goboard.WindowWidth+40), rl.White)
+		days := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+		for i, day := range days {
+			rl.DrawText(day, startX+int32(i)*cellWidth+10, 10, 20, goboard.Rose)
+		}
+
+		// Draw the hourly marks and vertical lines
+		for hour := 0; hour < 24; hour++ {
+			// Draw the hour label on the left
+			hourLabel := fmt.Sprintf("%02d:00", hour)
+			rl.DrawText(hourLabel, startX-60, int32(hour)*cellHeight+50, 20, goboard.Rose)
+
+			// Draw a short horizontal line at the first vertical line to mark the hour
+			rl.DrawLine(startX, int32(hour)*cellHeight+50, startX+10, int32(hour)*cellHeight+50, goboard.Rose)
+
+			// Draw vertical lines for each day
+			for day := 0; day < 7; day++ {
+				rl.DrawLine(
+					startX+int32(day)*cellWidth, 50,
+					startX+int32(day)*cellWidth, screenHeight,
+					rl.White,
+				)
+			}
+		}
 	}
 	rl.EndDrawing()
 }
